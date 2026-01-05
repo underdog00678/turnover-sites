@@ -20,23 +20,27 @@ function isValidUrl(value: string) {
 }
 
 function isValidEmail(value: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  return value.includes("@");
 }
 
 export default function StartForm() {
   const [url, setUrl] = useState("");
   const [email, setEmail] = useState("");
+  const [company, setCompany] = useState("");
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     const nextErrors: FormErrors = {};
     const trimmedUrl = url.trim();
     const trimmedEmail = email.trim();
+    const trimmedCompany = company.trim();
 
-    if (!trimmedUrl || !isValidUrl(trimmedUrl)) {
+    if (trimmedUrl && !isValidUrl(trimmedUrl)) {
       nextErrors.url = "Enter a valid URL starting with http or https.";
     }
 
@@ -49,32 +53,66 @@ export default function StartForm() {
       return;
     }
 
-    // TODO: Replace localStorage with Supabase insert once backend is ready.
+    if (trimmedCompany) {
+      setSubmitError("Unable to submit right now. Please try again.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError("");
+
     const entry = {
       url: trimmedUrl,
       email: trimmedEmail,
       createdAt: new Date().toISOString(),
     };
 
-    const stored = localStorage.getItem(STORAGE_KEY);
-    let submissions: typeof entry[] = [];
+    try {
+      const response = await fetch("/api/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: entry.email,
+          website_url: entry.url || null,
+          company: trimmedCompany || null,
+        }),
+      });
 
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          submissions = parsed;
-        }
-      } catch {
-        submissions = [];
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok || !payload?.ok) {
+        console.error("Lead submit failed", payload?.error);
+        setSubmitError(payload?.error ?? "Something went wrong. Please try again.");
+        setIsSubmitting(false);
+        return;
       }
-    }
 
-    submissions.unshift(entry);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(submissions));
+      const stored = localStorage.getItem(STORAGE_KEY);
+      let submissions: typeof entry[] = [];
+
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) {
+            submissions = parsed;
+          }
+        } catch {
+          submissions = [];
+        }
+      }
+
+      submissions.unshift(entry);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(submissions));
+    } catch (storageError) {
+      console.error("Lead submit failed", storageError);
+      setSubmitError("Unable to submit right now. Please try again.");
+      setIsSubmitting(false);
+      return;
+    }
 
     setErrors({});
     setSubmitted(true);
+    setIsSubmitting(false);
   };
 
   if (submitted) {
@@ -131,13 +169,24 @@ export default function StartForm() {
             onChange={(event) => setUrl(event.target.value)}
             aria-invalid={Boolean(errors.url)}
             aria-describedby={errors.url ? "url-error" : undefined}
-            required
           />
           {errors.url ? (
             <p id="url-error" className="text-xs text-red-600">
               {errors.url}
             </p>
           ) : null}
+        </div>
+        <div className="sr-only" aria-hidden="true">
+          <label htmlFor="company">Company</label>
+          <input
+            id="company"
+            name="company"
+            type="text"
+            tabIndex={-1}
+            autoComplete="off"
+            value={company}
+            onChange={(event) => setCompany(event.target.value)}
+          />
         </div>
         <div className="space-y-2">
           <label
@@ -175,13 +224,16 @@ export default function StartForm() {
         </ul>
         <button
           type="submit"
-          className="rounded-full border border-accent bg-accent px-6 py-3 text-sm font-medium text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-accentHover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+          className="rounded-full border border-accent bg-accent px-6 py-3 text-sm font-medium text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-accentHover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 disabled:cursor-not-allowed disabled:opacity-70"
+          disabled={isSubmitting}
         >
-          Send my site
+          {isSubmitting ? "Sending..." : "Send my site"}
         </button>
-        <p className="text-xs text-zinc-500">
-          (Supabase integration can be added later)
-        </p>
+        {submitError ? (
+          <p className="text-sm text-red-600" role="status">
+            {submitError}
+          </p>
+        ) : null}
       </div>
     </form>
   );

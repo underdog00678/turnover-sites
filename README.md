@@ -1,5 +1,23 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Local Google Sheets Setup
+
+Create a `.env.local` file with:
+
+```bash
+GOOGLE_SHEETS_WEBHOOK_URL=https://script.google.com/macros/s/your-script-id/exec
+```
+
+Run the dev server, then test the endpoint:
+
+```bash
+curl -i -X POST http://localhost:3000/api/leads \\
+  -H "Content-Type: application/json" \\
+  -d '{\"email\":\"test@example.com\",\"website_url\":\"https://example.com\",\"company\":\"\"}'
+```
+
+Check your Google Sheet to confirm the row was added.
+
 ## Getting Started
 
 First, run the development server:
